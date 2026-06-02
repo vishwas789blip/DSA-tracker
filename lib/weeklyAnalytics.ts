@@ -1,10 +1,7 @@
+import { getProgressHistory } from "./progressHistory";
+
 export interface WeeklyDay {
   day: string;
-  solved: number;
-}
-
-export interface DailyProgress {
-  date: string;
   solved: number;
 }
 
@@ -18,7 +15,14 @@ export interface WeeklyAnalyticsData {
 
 const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-/** Returns a local YYYY-MM-DD string without UTC conversion */
+const EMPTY_RESULT: WeeklyAnalyticsData = {
+  totalSolved: 0,
+  averageSolved: 0,
+  bestDay: "-",
+  bestSolved: 0,
+  days: [],
+};
+
 function toLocalDateString(date: Date): string {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, "0");
@@ -27,56 +31,44 @@ function toLocalDateString(date: Date): string {
 }
 
 export function getWeeklyAnalytics(): WeeklyAnalyticsData {
-  if (typeof window === "undefined") {
-    return {
-      totalSolved: 0,
-      averageSolved: 0,
-      bestDay: "-",
-      bestSolved: 0,
-      days: [],
-    };
-  }
+  if (typeof window === "undefined") return EMPTY_RESULT;
 
-  const history: DailyProgress[] = JSON.parse(
-    localStorage.getItem("dsa-progress-history") || "[]"
-  );
+  // fix: use getProgressHistory() (Record<string,number>) instead of
+  // reading localStorage directly and calling .find() on a non-array.
+  const history = getProgressHistory();
 
   const today = new Date();
   const days: WeeklyDay[] = [];
 
   let totalSolved = 0;
-  let bestSolved = 0;
-  let bestDay = "-"; // fix: neutral default, not "Day 1"
-  let activeDays = 0; // fix: count only days with data
+  let bestSolved  = 0;
+  let bestDay     = "-";
+  let activeDays  = 0;
 
   for (let i = 6; i >= 0; i--) {
-    const date = new Date(today);
+    const date   = new Date(today);
     date.setDate(today.getDate() - i);
 
-    const dateString = toLocalDateString(date); // fix: use local date
-    const entry = history.find((item) => item.date === dateString);
-    const solved = entry?.solved ?? 0;
+    const key    = toLocalDateString(date);
+    const solved = history[key] ?? 0;   // fix: direct object lookup, no .find()
+    const label  = DAY_LABELS[date.getDay()];
 
-    const dayLabel = DAY_LABELS[date.getDay()]; // fix: real weekday name
-
-    days.push({ day: dayLabel, solved });
-
+    days.push({ day: label, solved });
     totalSolved += solved;
 
-    if (entry) activeDays++; // fix: only count days that exist in history
+    if (solved > 0) activeDays++;
 
     if (solved > bestSolved) {
       bestSolved = solved;
-      bestDay = dayLabel;
+      bestDay    = label;
     }
   }
 
   return {
     totalSolved,
-    averageSolved:
-      activeDays > 0
-        ? Number((totalSolved / activeDays).toFixed(1)) // fix: divide by active days
-        : 0,
+    averageSolved: activeDays > 0
+      ? Number((totalSolved / activeDays).toFixed(1))
+      : 0,
     bestDay,
     bestSolved,
     days,

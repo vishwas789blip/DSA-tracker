@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 
 import { updateStreak } from "@/lib/streak";
 import { updateDailyGoal } from "@/lib/dailyGoal";
@@ -22,21 +22,15 @@ interface Stats {
 
 export function useTrackerData() {
   const [solved, setSolved] = useState<Set<string>>(new Set());
-  const [stats, setStats] = useState<Stats | null>(null);
+  const [stats, setStats]   = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
-
-  // fix: track wasAdded outside the updater to avoid reading race
-  const wasAddedRef = useRef(false);
 
   const fetchStats = useCallback(async () => {
     try {
-      const response = await fetch("/api/stats");
-      if (response.ok) {
-        const statsData = await response.json();
-        setStats(statsData);
-      }
-    } catch (error) {
-      console.error("Failed to fetch stats:", error);
+      const res = await fetch("/api/stats");
+      if (res.ok) setStats(await res.json());
+    } catch (err) {
+      console.error("Failed to fetch stats:", err);
     }
   }, []);
 
@@ -45,26 +39,21 @@ export function useTrackerData() {
       try {
         setLoading(true);
 
-        // fix: getSolvedProblems() returns Set<string> — use .size, not .length
         const localSolved = getSolvedProblems();
-        if (localSolved.size > 0) {
-          setSolved(localSolved); // fix: already a Set, no re-wrapping needed
-        }
+        if (localSolved.size > 0) setSolved(localSolved);
 
-        const response = await fetch("/api/problems");
-        if (!response.ok) throw new Error("Failed to fetch problems");
+        const res = await fetch("/api/problems");
+        if (!res.ok) throw new Error("Failed to fetch problems");
 
-        const data = await response.json();
-        const serverSolved = new Set<string>(data.solved || []);
+        const data         = await res.json();
+        const serverSolved = new Set<string>(data.solved ?? []);
 
         setSolved(serverSolved);
-        saveSolvedProblems(serverSolved); // fix: pass Set directly, not [...serverSolved]
-
+        saveSolvedProblems(serverSolved);
         await fetchStats();
-      } catch (error) {
-        console.error("Offline mode active:", error);
-        const backup = getSolvedProblems();
-        setSolved(backup); // fix: already a Set
+      } catch (err) {
+        console.error("Offline mode active:", err);
+        setSolved(getSolvedProblems());
       } finally {
         setLoading(false);
       }
@@ -74,14 +63,13 @@ export function useTrackerData() {
   }, [fetchStats]);
 
   const toggleProblem = useCallback(async (problemId: string) => {
+    // ✅ adding ko pehle synchronously read karo current state se
+    // dono setSolved calls isko use karengi — stale hone ka koi chance nahi
+    let adding = false;
 
-    // Phase 1: Compute next state synchronously before touching React
-    // fix: derive wasAdded before the updater so side-effects run exactly once
     setSolved((prev) => {
+      adding = !prev.has(problemId); // ✅ actual current state se derive hoga
       const updated = new Set(prev);
-      const adding = !updated.has(problemId);
-
-      wasAddedRef.current = adding; // fix: stable ref, not a closure variable
 
       if (adding) {
         updated.add(problemId);
@@ -89,49 +77,41 @@ export function useTrackerData() {
         updated.delete(problemId);
       }
 
-      saveSolvedProblems(updated); // fix: pass Set directly
+      saveSolvedProblems(updated);
+
+      // ✅ sirf CHECK pe chalega, uncheck pe nahi
+      if (adding) {
+        addSolvedProblemToday();
+        updateStreak();
+        updateDailyGoal();
+      }
+
       return updated;
     });
 
-    // fix: read the ref after the updater has been queued
-    const wasAdded = wasAddedRef.current;
-
-    // fix: side-effects moved outside the updater — won't double-fire in Strict Mode
-    if (wasAdded) {
-      addSolvedProblemToday();
-      updateStreak();
-      updateDailyGoal();
-    }
-
-    // Phase 2: Server persistence
+    // Server sync — ab `adding` sahi value hold karta hai
     try {
-      const response = await fetch("/api/problems", {
+      const res = await fetch("/api/problems", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ problemId, solved: wasAdded }),
+        body: JSON.stringify({ problemId, solved: adding }),
       });
 
-      if (!response.ok) throw new Error("Server failed to persist change");
+      if (!res.ok) throw new Error("Server failed to persist change");
 
-      const data = await response.json();
-      const latestSolved = new Set<string>(data.solved ?? []);
-
-      setSolved(latestSolved);
-      saveSolvedProblems(latestSolved); // fix: pass Set directly
+      const data   = await res.json();
+      const latest = new Set<string>(data.solved ?? []);
+      setSolved(latest);
+      saveSolvedProblems(latest);
       await fetchStats();
+    } catch (err) {
+      console.error("Sync failed, rolling back:", err);
 
-    } catch (error) {
-      console.error("Sync failed, rolling back:", error);
-
-      // Atomic rollback: invert only the target item, not the whole snapshot
-      setSolved((currentSet) => {
-        const rolledBack = new Set(currentSet);
-        if (wasAdded) {
-          rolledBack.delete(problemId);
-        } else {
-          rolledBack.add(problemId);
-        }
-        saveSolvedProblems(rolledBack); // fix: pass Set directly
+      setSolved((cur) => {
+        const rolledBack = new Set(cur);
+        if (adding) rolledBack.delete(problemId);
+        else        rolledBack.add(problemId);
+        saveSolvedProblems(rolledBack);
         return rolledBack;
       });
 

@@ -4,9 +4,12 @@ export interface DailyGoalData {
   lastDate: string | null;
 }
 
-const KEY = "dsa-daily-goal";
+// ─── Constants ────────────────────────────────────────────────────────────────
 
+const KEY          = "dsa-daily-goal";
 const DEFAULT_GOAL = 5;
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function toLocalDateString(date: Date): string {
   const y = date.getFullYear();
@@ -19,8 +22,8 @@ function isValidGoalData(obj: unknown): obj is DailyGoalData {
   if (typeof obj !== "object" || obj === null || Array.isArray(obj)) return false;
   const o = obj as Record<string, unknown>;
   return (
-    typeof o.goal === "number" && isFinite(o.goal) && o.goal > 0 &&
-    typeof o.solvedToday === "number" && isFinite(o.solvedToday) &&
+    typeof o.goal === "number" && Number.isFinite(o.goal) && o.goal > 0 &&
+    typeof o.solvedToday === "number" && Number.isFinite(o.solvedToday) &&
     (o.lastDate === null || typeof o.lastDate === "string")
   );
 }
@@ -29,42 +32,51 @@ function defaultData(): DailyGoalData {
   return { goal: DEFAULT_GOAL, solvedToday: 0, lastDate: null };
 }
 
-export function getDailyGoal(): DailyGoalData {
-  if (typeof window === "undefined") return defaultData(); // fix: SSR guard
+function persist(data: DailyGoalData): void {
+  localStorage.setItem(KEY, JSON.stringify(data));
+}
 
-  const saved = localStorage.getItem(KEY);
-  if (!saved) return defaultData();
+// ─── Public API ───────────────────────────────────────────────────────────────
+
+export function getDailyGoal(): DailyGoalData {
+  if (typeof window === "undefined") return defaultData();
 
   try {
-    const parsed: unknown = JSON.parse(saved); // fix: try/catch + validate
+    const saved = localStorage.getItem(KEY);
+    if (!saved) return defaultData();
+
+    const parsed: unknown = JSON.parse(saved);
     return isValidGoalData(parsed) ? parsed : defaultData();
   } catch {
     return defaultData();
   }
 }
 
-export function setDailyGoal(goal: number): DailyGoalData { // fix: expose goal setter
+export function setDailyGoal(goal: number): DailyGoalData {
   if (typeof window === "undefined") return defaultData();
-  if (goal <= 0 || !isFinite(goal)) throw new RangeError("goal must be a positive finite number");
+  if (!Number.isFinite(goal) || goal <= 0) {
+    throw new RangeError(`goal must be a positive finite number, got: ${goal}`);
+  }
 
-  const data = getDailyGoal();
-  const updated: DailyGoalData = { ...data, goal };
-  localStorage.setItem(KEY, JSON.stringify(updated));
+  const updated: DailyGoalData = { ...getDailyGoal(), goal };
+  persist(updated);
   return updated;
 }
 
 export function updateDailyGoal(): DailyGoalData {
-  if (typeof window === "undefined") return defaultData(); // fix: SSR guard
+  if (typeof window === "undefined") return defaultData();
 
-  const today = toLocalDateString(new Date()); // fix: local date
-  const data = getDailyGoal();
+  const today = toLocalDateString(new Date());
+  const data  = getDailyGoal();
 
-  if (data.lastDate !== today) {
-    data.solvedToday = 0; // reset on new day
-    data.lastDate = today;
-  }
+  const isNewDay = data.lastDate !== today;
 
-  data.solvedToday += 1;
-  localStorage.setItem(KEY, JSON.stringify(data));
-  return data;
+  const updated: DailyGoalData = {
+    ...data,
+    solvedToday: isNewDay ? 1 : data.solvedToday + 1,
+    lastDate:    today,
+  };
+
+  persist(updated);
+  return updated;
 }
