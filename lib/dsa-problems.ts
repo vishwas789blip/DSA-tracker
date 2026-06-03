@@ -6215,19 +6215,29 @@ export const DSA_MONTHS = [
       }
     ]
   }
-] as const;
+] ;
 
-export type Problem = typeof DSA_MONTHS[number]['weeks'][number]['probs'][number];
-export type Month = typeof DSA_MONTHS[number];
-
-export function getAllProblems(): Problem[] {
-  return DSA_MONTHS.flatMap(month =>
-    month.weeks.flatMap(week => week.probs)
-  );
+// After
+export interface Problem {
+  id: string;
+  n: string;
+  d: string;
+  s: string;
+  lc?: string;
 }
 
-export function getProblemsByMonth(monthId: string): Problem[] {
-  const month = DSA_MONTHS.find(m => m.id === monthId);
-  if (!month) return [];
-  return month.weeks.flatMap(week => week.probs);
+export interface Month {
+  id: string;
+  num: string;
+  name: string;
+  badge: string;
+  bc: string;
+  bt: string;
+  bar: string;
+  weeks: {
+    name: string;
+    day: string;
+    topics: string[];
+    probs: Problem[];
+  }[];
 }
