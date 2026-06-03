@@ -4,18 +4,14 @@ import React from 'react';
 import { Check, ExternalLink } from 'lucide-react';
 import { Problem } from '@/lib/dsa-problems';
 
-// ─── Types ───────────────────────────────────────────────────────────────────
-
 type Difficulty = 'easy' | 'med' | 'hard';
-type Platform = 'LC' | 'GFG' | 'CN' | 'IB' | 'HR' | 'CF' | 'EXT' | 'SEARCH';
+type Platform   = 'LC' | 'GFG' | 'CN' | 'IB' | 'HR' | 'CF' | 'EXT' | 'SEARCH';
 
 interface ProblemItemProps {
   problem: Problem;
   isSolved: boolean;
   onToggle: () => void;
 }
-
-// ─── Constants ────────────────────────────────────────────────────────────────
 
 const DIFFICULTY_STYLES: Record<Difficulty, string> = {
   easy: 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10',
@@ -42,31 +38,22 @@ const PLATFORM_URL_MATCHERS: Array<[string, Platform]> = [
   ['codeforces',    'CF'],
 ];
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
 function resolveProblemUrl(problem: Problem): string {
-  if (!problem.lc) {
-    return `https://www.google.com/search?q=${encodeURIComponent(problem.n)}`;
-  }
-  if (problem.lc.startsWith('EXT:')) {
-    return problem.lc.slice(4);
-  }
+  if (!problem.lc) return `https://www.google.com/search?q=${encodeURIComponent(problem.n)}`;
+  if (problem.lc.startsWith('EXT:')) return problem.lc.slice(4);
   return `https://leetcode.com/problems/${problem.lc}/`;
 }
 
 function getPlatform(lc: string | undefined): Platform {
   if (!lc) return 'SEARCH';
   if (!lc.startsWith('EXT:')) return 'LC';
-
   const lower = lc.toLowerCase();
-  const match = PLATFORM_URL_MATCHERS.find(([keyword]) => lower.includes(keyword));
+  const match = PLATFORM_URL_MATCHERS.find(([kw]) => lower.includes(kw));
   return match ? match[1] : 'EXT';
 }
 
-// ─── Component ────────────────────────────────────────────────────────────────
-
 export function ProblemItem({ problem, isSolved, onToggle }: ProblemItemProps) {
-  const platform = getPlatform(problem.lc);
+  const platform   = getPlatform(problem.lc);
   const difficulty = problem.d as Difficulty | undefined;
 
   const handleOpenLink = (e: React.MouseEvent<HTMLButtonElement>) => {
@@ -75,34 +62,24 @@ export function ProblemItem({ problem, isSolved, onToggle }: ProblemItemProps) {
   };
 
   return (
-    <div className="
-      group
-      flex items-center justify-between
-      px-5 py-3
-      border-b border-white/5
-      hover:bg-white/[0.03]
-      transition-colors duration-150
-    ">
-      {/* ── Left ── */}
-      <div className="flex items-center gap-4 min-w-0 flex-1">
+    <div className="flex items-center justify-between px-3 py-2.5 sm:px-5 sm:py-3 border-b border-white/5 hover:bg-white/[0.03] transition-colors duration-150">
 
-        {/* Serial number */}
-        <span className="w-8 shrink-0 text-right text-xs tabular-nums text-slate-600">
+      {/* ── Left ── */}
+      <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
+
+        {/* Serial — hidden on very small screens */}
+        <span className="hidden sm:block w-8 shrink-0 text-right text-xs tabular-nums text-slate-600">
           {String(problem.id).padStart(2, '0')}
         </span>
 
-        {/* Solved toggle */}
+        {/* Checkbox */}
         <button
           onClick={onToggle}
           aria-label={isSolved ? 'Mark as unsolved' : 'Mark as solved'}
           aria-pressed={isSolved}
           className={`
-            h-5 w-5 shrink-0
-            rounded
-            border
-            flex items-center justify-center
+            h-5 w-5 shrink-0 rounded border flex items-center justify-center
             transition-all duration-200
-
             ${isSolved
               ? 'bg-emerald-500 border-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]'
               : 'border-slate-600 hover:border-slate-400 hover:bg-white/5'
@@ -113,65 +90,44 @@ export function ProblemItem({ problem, isSolved, onToggle }: ProblemItemProps) {
         </button>
 
         {/* Problem name */}
-        <span
-          className={`
-            truncate text-sm font-medium transition-all duration-200
-            ${isSolved ? 'text-slate-600 line-through' : 'text-slate-200'}
-          `}
-        >
+        <span className={`
+          truncate text-xs sm:text-sm font-medium transition-all duration-200
+          ${isSolved ? 'text-slate-600 line-through' : 'text-slate-200'}
+        `}>
           {problem.n}
         </span>
       </div>
 
       {/* ── Right ── */}
-      <div className="flex items-center gap-2 pl-4 shrink-0">
+      <div className="flex items-center gap-1.5 pl-2 sm:gap-2 sm:pl-4 shrink-0">
 
-        {/* Topic / sub-category */}
+        {/* Topic — desktop only */}
         {problem.s && (
-          <span className="
-            hidden lg:block
-            rounded px-2.5 py-0.5
-            bg-white/[0.04] text-xs text-slate-500
-          ">
+          <span className="hidden xl:block rounded px-2.5 py-0.5 bg-white/[0.04] text-xs text-slate-500">
             {problem.s}
           </span>
         )}
 
-        {/* Difficulty badge */}
+        {/* Difficulty — hidden on mobile */}
         {difficulty && difficulty in DIFFICULTY_STYLES && (
-          <span className={`
-            rounded border px-2.5 py-0.5
-            text-xs font-semibold uppercase tracking-wide
-            ${DIFFICULTY_STYLES[difficulty]}
-          `}>
+          <span className={`hidden sm:inline-flex rounded border px-2 py-0.5 text-[10px] sm:text-xs font-semibold uppercase tracking-wide ${DIFFICULTY_STYLES[difficulty]}`}>
             {difficulty}
           </span>
         )}
 
         {/* Platform badge */}
-        <span className={`
-          rounded border px-2.5 py-0.5
-          text-xs font-semibold
-          ${PLATFORM_STYLES[platform]}
-        `}>
+        <span className={`rounded border px-2 py-0.5 text-[10px] sm:text-xs font-semibold ${PLATFORM_STYLES[platform]}`}>
           {platform}
         </span>
 
-        {/* Open link */}
+        {/* Open button */}
         <button
           onClick={handleOpenLink}
           aria-label={`Open ${problem.n}`}
-          className="
-            flex items-center gap-1.5
-            rounded border border-white/10
-            bg-white/5 px-2.5 py-1
-            text-xs text-slate-400
-            hover:bg-cyan-500/15 hover:text-cyan-300 hover:border-cyan-500/25
-            transition-all duration-150
-          "
+          className="flex items-center gap-1 rounded border border-white/10 bg-white/5 px-2 py-1 text-[10px] sm:text-xs text-slate-400 hover:bg-cyan-500/15 hover:text-cyan-300 hover:border-cyan-500/25 transition-all duration-150"
         >
           <ExternalLink className="h-3 w-3" />
-          Open
+          <span className="hidden sm:inline">Open</span>
         </button>
       </div>
     </div>

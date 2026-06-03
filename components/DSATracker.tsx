@@ -22,7 +22,7 @@ import {
   getBestDay,
 } from '@/lib/progressHistory';
 
-// ── Types ────────────────────────────────────────────────────────────────────
+// ── Types ─────────────────────────────────────────────────────────────────────
 
 interface AnalyticsState {
   today: number;
@@ -46,22 +46,30 @@ interface Star {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+// Single consolidated localStorage read — avoids 4-5 separate reads per toggle
 function readLocalMetrics() {
-  const goalData = getDailyGoal();
+  const goalData   = getDailyGoal();
   const streakData = getStreakData();
+
   return {
-    goal: { goal: goalData.goal, solvedToday: goalData.solvedToday } satisfies GoalState,
+    goal: {
+      goal:        goalData.goal,
+      solvedToday: goalData.solvedToday,
+    } satisfies GoalState,
+
     streak: {
-      currentStreak: streakData.currentStreak,
-      bestStreak: streakData.bestStreak,
+      currentStreak:  streakData.currentStreak,
+      bestStreak:     streakData.bestStreak,
       lastSolvedDate: streakData.lastSolvedDate,
     } satisfies StreakData,
+
     analytics: {
-      today: getTodaySolvedCount(),
-      week: getThisWeekSolved(),
-      month: getThisMonthSolved(),
+      today:   getTodaySolvedCount(),
+      week:    getThisWeekSolved(),
+      month:   getThisMonthSolved(),
       bestDay: getBestDay(),
     } satisfies AnalyticsState,
+
     weeklyData: getWeeklyAnalytics() satisfies WeeklyAnalyticsData,
   };
 }
@@ -71,17 +79,13 @@ function readLocalMetrics() {
 export function DSATracker() {
   const { solved, stats, loading, toggleProblem } = useTrackerData();
 
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm]       = useState('');
   const [expandedMonths, setExpandedMonths] = useState<Record<string, boolean>>({});
-  const [stars, setStars] = useState<Star[]>([]);
+  const [stars, setStars]                 = useState<Star[]>([]);
 
-  const [, setAnalytics] = useState<AnalyticsState>({
-    today: 0, week: 0, month: 0, bestDay: null,
-  });
-  const [goal, setGoal] = useState<GoalState>({ goal: 5, solvedToday: 0 });
-  const [streak, setStreak] = useState<StreakData>({
-    currentStreak: 0, bestStreak: 0, lastSolvedDate: null,
-  });
+  const [, setAnalytics] = useState<AnalyticsState>({ today: 0, week: 0, month: 0, bestDay: null });
+  const [goal, setGoal]  = useState<GoalState>({ goal: 5, solvedToday: 0 });
+  const [streak, setStreak] = useState<StreakData>({ currentStreak: 0, bestStreak: 0, lastSolvedDate: null });
   const [weeklyData, setWeeklyData] = useState<WeeklyAnalyticsData | null>(null);
 
   const applyMetrics = useCallback((metrics: ReturnType<typeof readLocalMetrics>) => {
@@ -91,16 +95,15 @@ export function DSATracker() {
     setWeeklyData(metrics.weeklyData);
   }, []);
 
-  // Mount effect: read localStorage and generate stars (both client-only)
+  // Mount: read localStorage + generate stars (both client-only)
   useEffect(() => {
     applyMetrics(readLocalMetrics());
-
     setStars(
       Array.from({ length: 80 }, (_, i) => ({
-        id: i,
-        left: Math.random() * 100,
-        top: Math.random() * 100,
-        size: Math.random() * 3 + 1,
+        id:    i,
+        left:  Math.random() * 100,
+        top:   Math.random() * 100,
+        size:  Math.random() * 3 + 1,
         delay: Math.random() * 5,
       }))
     );
@@ -115,19 +118,20 @@ export function DSATracker() {
     applyMetrics(readLocalMetrics());
   }, [toggleProblem, applyMetrics]);
 
+  // Called by DailyGoalCard when user changes their goal target
+  const handleGoalChange = useCallback((newGoal: number) => {
+    setGoal((prev) => ({ ...prev, goal: newGoal }));
+  }, []);
+
   const filteredMonths = useMemo(() => {
-    const normalizedSearch = searchTerm.toLowerCase().trim();
-    return DSA_MONTHS.filter((month) => {
-      return (
-        !normalizedSearch ||
-        month.name.toLowerCase().includes(normalizedSearch) ||
-        month.weeks.some((week) =>
-          week.probs.some((prob) =>
-            prob.n.toLowerCase().includes(normalizedSearch)
-          )
-        )
-      );
-    });
+    const q = searchTerm.toLowerCase().trim();
+    if (!q) return DSA_MONTHS;
+    return DSA_MONTHS.filter((month) =>
+      month.name.toLowerCase().includes(q) ||
+      month.weeks.some((week) =>
+        week.probs.some((prob) => prob.n.toLowerCase().includes(q))
+      )
+    );
   }, [searchTerm]);
 
   if (loading) {
@@ -148,7 +152,7 @@ export function DSATracker() {
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(139,92,246,0.25),transparent_40%)]" />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_bottom,rgba(6,182,212,0.18),transparent_40%)]" />
 
-      {/* Stars Canvas Layer */}
+      {/* Stars */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
         {stars.map((star) => (
           <motion.div
@@ -187,7 +191,7 @@ export function DSATracker() {
           </div>
         </div>
 
-        {/* Overview Stats Header */}
+        {/* Stats */}
         {stats && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mb-6">
             <StatsCard stats={stats} />
@@ -195,22 +199,24 @@ export function DSATracker() {
         )}
 
         <div className="mt-6 space-y-6">
-          {/* Half-and-Half Split Row for Streak and Daily Goal */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <StreakCard current={streak.currentStreak} best={streak.bestStreak} />
-            <DailyGoalCard goal={goal.goal} solvedToday={goal.solvedToday} />
+            <DailyGoalCard
+              goal={goal.goal}
+              solvedToday={goal.solvedToday}
+              onGoalChange={handleGoalChange}
+            />
           </div>
 
-          {/* Weekly Analytics Section */}
           {weeklyData && <WeeklyAnalytics data={weeklyData} />}
         </div>
 
-        {/* Search Input Layout */}
+        {/* Search */}
         <div className="my-10">
           <SearchBar searchTerm={searchTerm} setSearchTerm={setSearchTerm} />
         </div>
 
-        {/* Month Tracking Grid View */}
+        {/* Month Cards */}
         <div className="space-y-8">
           {filteredMonths.map((month, index) => (
             <motion.div

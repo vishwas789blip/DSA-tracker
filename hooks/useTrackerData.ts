@@ -1,9 +1,14 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 
 import { updateStreak } from "@/lib/streak";
-import { updateDailyGoal } from "@/lib/dailyGoal";
-import { addSolvedProblemToday } from "@/lib/progressHistory";
+import { syncDailyGoal } from "@/lib/dailyGoal";
+import { syncTodayCount, getTodaySolvedCount } from "@/lib/progressHistory";
 import { saveSolvedProblems, getSolvedProblems } from "@/lib/localBackup";
+import { DSA_MONTHS } from "@/lib/dsa-problems";
+
+const ALL_PROBLEM_IDS = DSA_MONTHS.flatMap((m) =>
+  m.weeks.flatMap((w) => w.probs.map((p) => p.id))
+);
 
 interface MonthStat {
   id: string;
@@ -21,9 +26,11 @@ interface Stats {
 }
 
 export function useTrackerData() {
-  const [solved, setSolved] = useState<Set<string>>(new Set());
-  const [stats, setStats]   = useState<Stats | null>(null);
+  const [solved, setSolved]   = useState<Set<string>>(new Set());
+  const [stats, setStats]     = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const solvedRef = useRef<Set<string>>(new Set());
 
   const fetchStats = useCallback(async () => {
     try {
@@ -40,7 +47,10 @@ export function useTrackerData() {
         setLoading(true);
 
         const localSolved = getSolvedProblems();
-        if (localSolved.size > 0) setSolved(localSolved);
+        if (localSolved.size > 0) {
+          setSolved(localSolved);
+          solvedRef.current = localSolved;
+        }
 
         const res = await fetch("/api/problems");
         if (!res.ok) throw new Error("Failed to fetch problems");
@@ -49,11 +59,14 @@ export function useTrackerData() {
         const serverSolved = new Set<string>(data.solved ?? []);
 
         setSolved(serverSolved);
+        solvedRef.current = serverSolved;
         saveSolvedProblems(serverSolved);
         await fetchStats();
       } catch (err) {
         console.error("Offline mode active:", err);
-        setSolved(getSolvedProblems());
+        const backup = getSolvedProblems();
+        setSolved(backup);
+        solvedRef.current = backup;
       } finally {
         setLoading(false);
       }
@@ -62,34 +75,27 @@ export function useTrackerData() {
     loadData();
   }, [fetchStats]);
 
+  const syncMetrics = useCallback((solvedSet: Set<string>) => {
+    syncTodayCount(solvedSet, ALL_PROBLEM_IDS);
+    syncDailyGoal(getTodaySolvedCount());
+  }, []);
+
   const toggleProblem = useCallback(async (problemId: string) => {
-    // ✅ adding ko pehle synchronously read karo current state se
-    // dono setSolved calls isko use karengi — stale hone ka koi chance nahi
-    let adding = false;
+    const adding = !solvedRef.current.has(problemId);
 
-    setSolved((prev) => {
-      adding = !prev.has(problemId); // ✅ actual current state se derive hoga
-      const updated = new Set(prev);
+    // Optimistic update
+    const updated = new Set(solvedRef.current);
+    if (adding) updated.add(problemId);
+    else        updated.delete(problemId);
 
-      if (adding) {
-        updated.add(problemId);
-      } else {
-        updated.delete(problemId);
-      }
+    solvedRef.current = updated;
+    setSolved(updated);
+    saveSolvedProblems(updated);
+    syncMetrics(updated); // ✅ Fix 3a: sync immediately on optimistic update
 
-      saveSolvedProblems(updated);
+    if (adding) updateStreak();
 
-      // ✅ sirf CHECK pe chalega, uncheck pe nahi
-      if (adding) {
-        addSolvedProblemToday();
-        updateStreak();
-        updateDailyGoal();
-      }
-
-      return updated;
-    });
-
-    // Server sync — ab `adding` sahi value hold karta hai
+    // Server sync
     try {
       const res = await fetch("/api/problems", {
         method: "POST",
@@ -101,23 +107,27 @@ export function useTrackerData() {
 
       const data   = await res.json();
       const latest = new Set<string>(data.solved ?? []);
+
+      solvedRef.current = latest;
       setSolved(latest);
       saveSolvedProblems(latest);
+      syncMetrics(latest); // ✅ Fix 3b: sync again after server confirms
       await fetchStats();
+
     } catch (err) {
       console.error("Sync failed, rolling back:", err);
 
-      setSolved((cur) => {
-        const rolledBack = new Set(cur);
-        if (adding) rolledBack.delete(problemId);
-        else        rolledBack.add(problemId);
-        saveSolvedProblems(rolledBack);
-        return rolledBack;
-      });
+      const rolledBack = new Set(solvedRef.current);
+      if (adding) rolledBack.delete(problemId);
+      else        rolledBack.add(problemId);
 
+      solvedRef.current = rolledBack;
+      setSolved(rolledBack);
+      saveSolvedProblems(rolledBack);
+      syncMetrics(rolledBack); // ✅ Fix 3c: sync on rollback too
       await fetchStats();
     }
-  }, [fetchStats]);
+  }, [fetchStats, syncMetrics]);
 
   return { solved, stats, loading, toggleProblem };
 }

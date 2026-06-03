@@ -7,9 +7,8 @@ const _geist = Geist({ subsets: ["latin"] });
 const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: 'v0 App',
-  description: 'Created with v0',
-  generator: 'v0.app',
+  title: 'DSA Quest',
+  description: 'Solve 5 Problems Daily · Track Progress · Get Placement Ready',
   icons: {
     icon: [
       {
@@ -36,7 +35,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className="font-sans antialiased" style={{backgroundColor: '#0a0e27'}}>
+      <body className="font-sans antialiased" style={{ backgroundColor: '#0a0e27' }}>
         {children}
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>

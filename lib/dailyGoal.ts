@@ -63,17 +63,36 @@ export function setDailyGoal(goal: number): DailyGoalData {
   return updated;
 }
 
+/**
+ * ✅ Fix: blindly +1 karne ki jagah, directly count SET karo
+ * solved set se — check/uncheck dono sahi reflect honge
+ */
+export function syncDailyGoal(solvedTodayCount: number): DailyGoalData {
+  if (typeof window === "undefined") return defaultData();
+
+  const today = toLocalDateString(new Date());
+  const data  = getDailyGoal();
+
+  const updated: DailyGoalData = {
+    goal:        data.goal,
+    solvedToday: solvedTodayCount, // ✅ directly set, no +1
+    lastDate:    today,
+  };
+
+  persist(updated);
+  return updated;
+}
+
+/** @deprecated — blindly +1 karta hai, drift hota hai. syncDailyGoal use karo */
 export function updateDailyGoal(): DailyGoalData {
   if (typeof window === "undefined") return defaultData();
 
   const today = toLocalDateString(new Date());
   const data  = getDailyGoal();
 
-  const isNewDay = data.lastDate !== today;
-
   const updated: DailyGoalData = {
     ...data,
-    solvedToday: isNewDay ? 1 : data.solvedToday + 1,
+    solvedToday: data.lastDate !== today ? 1 : data.solvedToday + 1,
     lastDate:    today,
   };
 
