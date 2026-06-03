@@ -6215,7 +6215,7 @@ export const DSA_MONTHS = [
       }
     ]
   }
-] ;
+];
 
 // After
 export interface Problem {
